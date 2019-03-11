@@ -1,8 +1,5 @@
-build_win/
-*.pyc
-*.pyo
-bin/
-.vs/
-obj/
-*.user
+﻿################################################################################
+# This .gitignore file was automatically created by Microsoft(R) Visual Studio.
+################################################################################
 
+/.vs

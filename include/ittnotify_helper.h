@@ -1,4 +1,7 @@
-#pragma once
+﻿#pragma once
+
+#ifdef ITT_INSTRUMENTATION_ENABLED
+
 #include <stdint.h>
 #include <string>
 #include <type_traits>
@@ -6,6 +9,10 @@
 
 #define INTEL_ITTNOTIFY_API_PRIVATE
 #include "ittnotify.h"
+
+#if ITT_PLATFORM==ITT_PLATFORM_WIN
+#include <nowide/convert.hpp>
+#endif
 
 namespace itt_notify {
 
@@ -44,7 +51,12 @@ public:
 
     void AddArg(__itt_string_handle* pName, const char* value)
     {
+#if ITT_PLATFORM==ITT_PLATFORM_WIN && (defined(UNICODE) || defined(_UNICODE))
+        // string value must be converted to wchar_t
+        __itt_metadata_str_add(m_pDomain, m_id, pName, nowide::widen(value).c_str(), 0);
+#else
         __itt_metadata_str_add(m_pDomain, m_id, pName, value, 0);
+#endif
     }
 
     void AddArg(__itt_string_handle* pName, void const* const pValue)
@@ -71,8 +83,20 @@ public:
     #define UNICODE_AGNOSTIC(name) name
 #endif
 
-#define ITT_DOMAIN(/*const char* */domain)\
-    static const __itt_domain* __itt_domain_name = UNICODE_AGNOSTIC(__itt_domain_create)(domain)
+#define ITT_DOMAIN_LOCAL(/*const char* */domain)\
+    static const __itt_domain* __itt_domain_instance = UNICODE_AGNOSTIC(__itt_domain_create)(domain)
+
+#define ITT_DOMAIN_GLOBAL(/*const char* */domain)\
+    const char* __itt_domain_name = domain;\
+    __itt_domain* __itt_domain_instance = nullptr
+
+#define ITT_DOMAIN_EXTERN()\
+    extern const char* __itt_domain_name;\
+    extern __itt_domain* __itt_domain_instance
+
+#define ITT_DOMAIN_INIT()\
+    if (!__itt_domain_instance && __itt_domain_name)\
+        __itt_domain_instance = UNICODE_AGNOSTIC(__itt_domain_create)(__itt_domain_name)
 
 #if defined(_MSC_VER) && _MSC_VER >= 1900 //since VS 2015 magic statics are supported, TODO: check with other compilers
     #define ITT_MAGIC_STATIC(static_variable)
@@ -84,7 +108,8 @@ public:
 #define ITT_SCOPE(region, name)\
     static __itt_string_handle* __itt_scope_name = UNICODE_AGNOSTIC(__itt_string_handle_create)(name);\
     ITT_MAGIC_STATIC(__itt_scope_name);\
-    itt_notify::Task<region> __itt_scope_item(__itt_domain_name, __itt_scope_name)
+    ITT_DOMAIN_INIT();\
+    itt_notify::Task<region> __itt_scope_item(__itt_domain_instance, __itt_scope_name)
 
 #define ITT_SCOPE_TASK(/*const char* */name) ITT_SCOPE(false, name)
 #define ITT_SCOPE_REGION(/*const char* */name) ITT_SCOPE(true, name)
@@ -108,14 +133,16 @@ enum Scope
 #define ITT_MARKER(/*const char* */name, /*enum Scope*/scope) {\
     static __itt_string_handle* __itt_marker_name = UNICODE_AGNOSTIC(__itt_string_handle_create)(name);\
     ITT_MAGIC_STATIC(__itt_marker_name);\
-    __itt_marker(__itt_domain_name, __itt_null, __itt_marker_name, (__itt_scope)itt_notify::scope);\
+    ITT_DOMAIN_INIT();\
+    __itt_marker(__itt_domain_instance, __itt_null, __itt_marker_name, (__itt_scope)itt_notify::scope);\
 }
 
 #define ITT_COUNTER(/*const char* */name, /*double */value) { \
     static __itt_string_handle* __itt_counter_name = UNICODE_AGNOSTIC(__itt_string_handle_create)(name);\
     ITT_MAGIC_STATIC(__itt_counter_name);\
     double counter_value = value;\
-    __itt_metadata_add(__itt_domain_name, __itt_null, __itt_counter_name, __itt_metadata_double, 1, &counter_value);\
+    ITT_DOMAIN_INIT();\
+    __itt_metadata_add(__itt_domain_instance, __itt_null, __itt_counter_name, __itt_metadata_double, 1, &counter_value);\
 }
 
 class ScopeTrack
@@ -137,6 +164,18 @@ public:
     ITT_MAGIC_STATIC(itt_track_name);\
     itt_notify::ScopeTrack itt_track(itt_track_name);
 
-//TODO: objects
-
 } //namespace itt_notify
+
+#else
+
+#define ITT_DOMAIN(/*const char* */domain)
+#define ITT_SCOPE(region, name)
+#define ITT_SCOPE_TASK(/*const char* */name)
+#define ITT_SCOPE_REGION(/*const char* */name)
+#define ITT_FUNCTION_TASK()
+#define ITT_ARG(/*const char* */name, /*number or string*/ value)
+#define ITT_MARKER(/*const char* */name, /*enum Scope*/scope)
+#define ITT_COUNTER(/*const char* */name, /*double */value)
+#define ITT_SCOPE_TRACK(/*const char* */group, /*const char* */ track)
+
+#endif
