@@ -168,7 +168,10 @@ public:
 
 #else
 
-#define ITT_DOMAIN(/*const char* */domain)
+#define ITT_DOMAIN_LOCAL(/*const char* */domain)
+#define ITT_DOMAIN_GLOBAL(/*const char* */domain)
+#define ITT_DOMAIN_EXTERN()
+#define ITT_DOMAIN_INIT()
 #define ITT_SCOPE(region, name)
 #define ITT_SCOPE_TASK(/*const char* */name)
 #define ITT_SCOPE_REGION(/*const char* */name)
